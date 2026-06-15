@@ -7,18 +7,43 @@
 # translates UIDs and the env vars are not set.
 if [ "$(id -u)" = "0" ] && [ -n "$IRONCURTAIN_AGENT_UID" ] && [ -n "$IRONCURTAIN_AGENT_GID" ]; then
   if [ "$IRONCURTAIN_AGENT_UID" != "1000" ] || [ "$IRONCURTAIN_AGENT_GID" != "1000" ]; then
+    current_uid="$(id -u codespace)"
+    current_gid="$(id -g codespace)"
+
     # Fail hard on remap errors — see entrypoint-claude-code.sh for the
     # full rationale. Without explicit checks, a UID collision (host UID
     # already in use by a system user baked into the image) silently
     # recreates the original issue #232 bug.
-    groupmod -g "$IRONCURTAIN_AGENT_GID" codespace || {
-      echo "[ironcurtain] groupmod failed: cannot remap codespace group to GID $IRONCURTAIN_AGENT_GID (already in use?)" >&2
-      exit 1
-    }
-    usermod -u "$IRONCURTAIN_AGENT_UID" -g "$IRONCURTAIN_AGENT_GID" codespace || {
-      echo "[ironcurtain] usermod failed: cannot remap codespace user to UID $IRONCURTAIN_AGENT_UID (already in use?)" >&2
-      exit 1
-    }
+    #
+    # GID collisions are different from UID collisions: if the requested
+    # group ID already exists in the image (for example GID 100 = "users"),
+    # that is usually fine. In that case, reuse the existing group instead
+    # of failing the container startup.
+    #
+    # TODO: Verify the above paragraph explaining why the below is
+    # OK. It is AI generated, and while it's not obviously wrong (to
+    # me), I'm not confident in reviewing in.
+    if [ "$current_gid" != "$IRONCURTAIN_AGENT_GID" ]; then
+      if getent group "$IRONCURTAIN_AGENT_GID" >/dev/null 2>&1; then
+        usermod -g "$IRONCURTAIN_AGENT_GID" codespace || {
+          echo "[ironcurtain] usermod failed: cannot assign existing GID $IRONCURTAIN_AGENT_GID to codespace" >&2
+          exit 1
+        }
+      else
+        groupmod -g "$IRONCURTAIN_AGENT_GID" codespace || {
+          echo "[ironcurtain] groupmod failed: cannot remap codespace group to GID $IRONCURTAIN_AGENT_GID (already in use?)" >&2
+          exit 1
+        }
+      fi
+    fi
+
+    if [ "$current_uid" != "$IRONCURTAIN_AGENT_UID" ]; then
+      usermod -u "$IRONCURTAIN_AGENT_UID" -g "$IRONCURTAIN_AGENT_GID" codespace || {
+        echo "[ironcurtain] usermod failed: cannot remap codespace user to UID $IRONCURTAIN_AGENT_UID (already in use?)" >&2
+        exit 1
+      }
+    fi
+
     chown -R "$IRONCURTAIN_AGENT_UID:$IRONCURTAIN_AGENT_GID" /home/codespace /workspace || {
       echo "[ironcurtain] chown failed: cannot reset ownership of /home/codespace and /workspace to $IRONCURTAIN_AGENT_UID:$IRONCURTAIN_AGENT_GID" >&2
       exit 1
