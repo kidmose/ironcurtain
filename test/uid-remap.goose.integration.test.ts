@@ -32,11 +32,14 @@
  *     assertions reference the constant.
  *
  *   - UID 33 (`www-data`) is the collision case. Present in the base
- *     image; `groupmod -g 33 codespace` fails because gid 33 is already
- *     taken, so the entrypoint exits non-zero with the
- *     `[ironcurtain] groupmod failed:` (or `usermod failed:`) diagnostic
- *     added in commit 2f463f3. The hard-error contract guards against
- *     silent fall-through to a broken UID mapping.
+ *     image; the test keeps the GID non-colliding so the Goose entrypoint
+ *     reaches the `usermod -u 33` failure directly. Goose now reuses an
+ *     existing target GID instead of failing immediately on GID collision,
+ *     so reusing 33 for both UID and GID can spend a long time in the
+ *     group-adjustment path before ever hitting the intended UID-collision
+ *     diagnostic. The hard-error contract is still the same: the entrypoint
+ *     must exit non-zero and emit a `[ironcurtain] ... failed:` message
+ *     instead of silently falling through to a broken UID mapping.
  *
  *   - Cleanup. The entrypoint's `chown -R $UID:$GID /workspace`
  *     propagates through the bind mount, so the host-side workspace
@@ -79,6 +82,13 @@ const REMAP_UID = 1500;
 
 /** A UID known to collide with a baked image user (`www-data`). */
 const COLLIDING_UID = 33;
+
+/**
+ * Keep the GID non-colliding so the Goose entrypoint reaches the UID-collision
+ * `usermod -u` branch directly. Unlike the Claude Code entrypoint, Goose now
+ * reuses an existing group ID instead of failing immediately on GID collision.
+ */
+const NON_COLLIDING_GID = REMAP_UID;
 
 /**
  * Polls until the entrypoint has finished running `usermod`/`groupmod`/`chown`
@@ -334,11 +344,13 @@ describe.skipIf(!gooseDockerReady)('Goose agent container UID/GID remap (issue #
 
     it(`entrypoint exits non-zero and logs a diagnostic when UID ${COLLIDING_UID} collides with a baked user`, async () => {
       // Run the entrypoint as root (`--user 0:0`) with a colliding
-      // IRONCURTAIN_AGENT_UID. `groupmod` runs first; gid 33 also
-      // belongs to `www-data`, so the diagnostic will be `groupmod
-      // failed:` (the entrypoint fails on the first collision). Either
-      // error proves the hard-error contract: silent fall-through is
-      // the regression we're guarding against.
+      // IRONCURTAIN_AGENT_UID but a non-colliding GID. Goose's entrypoint
+      // now reuses an existing target GID instead of failing immediately on
+      // GID collision, so using 33 for both UID and GID can spend a long
+      // time in group adjustment before ever reaching the intended
+      // UID-collision branch. Keeping the GID conflict-free makes this test
+      // exercise the hard-error contract we actually care about: a colliding
+      // UID must terminate the entrypoint with a clear diagnostic.
       let result: { stdout: string; stderr: string; exitCode: number };
       try {
         const ok = await execFile(
@@ -353,11 +365,11 @@ describe.skipIf(!gooseDockerReady)('Goose agent container UID/GID remap (issue #
             '-e',
             `IRONCURTAIN_AGENT_UID=${COLLIDING_UID}`,
             '-e',
-            `IRONCURTAIN_AGENT_GID=${COLLIDING_UID}`,
+            `IRONCURTAIN_AGENT_GID=${NON_COLLIDING_GID}`,
             IMAGE,
             'true',
           ],
-          { timeout: 30_000 },
+          { timeout: 60_000 },
         );
         result = { stdout: ok.stdout, stderr: ok.stderr, exitCode: 0 };
       } catch (err: unknown) {
@@ -368,11 +380,11 @@ describe.skipIf(!gooseDockerReady)('Goose agent container UID/GID remap (issue #
       // Container must exit non-zero. The entrypoint script uses `exit 1`
       // explicitly on each failure branch.
       expect(result.exitCode).not.toBe(0);
-      // Stderr must contain one of the diagnostic lines — we accept
-      // either `usermod failed:` or `groupmod failed:` because groupmod
-      // runs first and gid 33 also collides with www-data.
+      // Stderr must contain the hard-failure diagnostic. We still
+      // accept either branch defensively, but with the non-colliding GID
+      // above the intended path is `usermod failed:` for the UID collision.
       const combined = `${result.stdout}\n${result.stderr}`;
       expect(combined).toMatch(/\[ironcurtain\] (usermod|groupmod) failed:/);
-    }, 60_000);
+    }, 90_000);
   });
 });
