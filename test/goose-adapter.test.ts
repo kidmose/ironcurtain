@@ -287,7 +287,7 @@ describe('GooseAdapter.getProviders', () => {
       makeUserConfig({
         gooseProvider: 'azure_openai',
         azureOpenAIEndpoint: 'https://myinstance.openai.azure.com',
-      })
+      }),
     );
     const providers = adapter.getProviders({
       userConfig: makeUserConfig({
@@ -410,7 +410,7 @@ describe('GooseAdapter.buildEnv', () => {
         azureOpenAIDeploymentName: 'gpt-4-deployment',
         azureOpenAIApiVersion: '2024-08-01-preview',
         azureOpenAIApiKey: 'key-test',
-      })
+      }),
     );
     const azureConfig = {
       userConfig: makeUserConfig({
@@ -437,7 +437,9 @@ describe('GooseAdapter.buildEnv', () => {
       }),
     } as IronCurtainConfig;
     const fakeKeys = new Map();
-    expect(() => adapter.buildEnv(azureConfig, fakeKeys)).toThrow('Azure OpenAI provider requires AZURE_OPENAI_ENDPOINT');
+    expect(() => adapter.buildEnv(azureConfig, fakeKeys)).toThrow(
+      'Azure OpenAI provider requires AZURE_OPENAI_ENDPOINT',
+    );
   });
 
   it('throws error when azure_openai is selected but AZURE_OPENAI_DEPLOYMENT_NAME is missing', () => {
@@ -445,7 +447,7 @@ describe('GooseAdapter.buildEnv', () => {
       makeUserConfig({
         gooseProvider: 'azure_openai',
         azureOpenAIEndpoint: 'https://myinstance.openai.azure.com',
-      })
+      }),
     );
     const azureConfig = {
       userConfig: makeUserConfig({
@@ -464,7 +466,7 @@ describe('GooseAdapter.buildEnv', () => {
         gooseProvider: 'azure_openai',
         azureOpenAIEndpoint: 'https://myinstance.openai.azure.com',
         azureOpenAIDeploymentName: 'gpt-4-deployment',
-      })
+      }),
     );
     const azureConfig = {
       userConfig: makeUserConfig({

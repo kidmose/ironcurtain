@@ -1074,8 +1074,7 @@ function validateGooseProvider(envValue: string | undefined): GooseProvider | un
     return envValue as GooseProvider;
   }
   throw new Error(
-    `Invalid GOOSE_PROVIDER environment variable: "${envValue}". ` +
-    `Allowed values: ${GOOSE_PROVIDERS.join(', ')}`
+    `Invalid GOOSE_PROVIDER environment variable: "${envValue}". ` + `Allowed values: ${GOOSE_PROVIDERS.join(', ')}`,
   );
 }
 
