@@ -1068,6 +1068,17 @@ function resolveSignalFromUserConfig(
   };
 }
 
+function validateGooseProvider(envValue: string | undefined): GooseProvider | undefined {
+  if (!envValue) return undefined;
+  if (GOOSE_PROVIDERS.includes(envValue as GooseProvider)) {
+    return envValue as GooseProvider;
+  }
+  throw new Error(
+    `Invalid GOOSE_PROVIDER environment variable: "${envValue}". ` +
+    `Allowed values: ${GOOSE_PROVIDERS.join(', ')}`
+  );
+}
+
 /**
  * Applies environment variable overrides for all provider API keys.
  * Each provider's standard env var takes precedence over config file values.
@@ -1085,7 +1096,7 @@ function applyEnvOverrides(config: ResolvedUserConfig): ResolvedUserConfig {
     azureOpenAIEndpoint: validateBaseUrlEnv('AZURE_OPENAI_ENDPOINT') ?? config.azureOpenAIEndpoint,
     azureOpenAIDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || config.azureOpenAIDeploymentName,
     azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION || config.azureOpenAIApiVersion,
-    gooseProvider: (process.env.GOOSE_PROVIDER as GooseProvider | undefined) || config.gooseProvider,
+    gooseProvider: validateGooseProvider(process.env.GOOSE_PROVIDER) || config.gooseProvider,
     gooseModel: process.env.GOOSE_MODEL || config.gooseModel,
     modelProviders: applyOpenrouterKeyEnv(config.modelProviders),
   };
